@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Royal Cat Tracker - Supabase Cloud</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@1,400..700&family=Space+Grotesk:wght@300;400;500;600&display=swap" rel="stylesheet">
+    
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+    <style>
+        :root {
+            --bg-cream: #FDFBF7;
+            --charcoal: #2A2A2A;
+            --gold: #D4AF37;
+            --salmon: #E8A7A1;
+            --glass: rgba(255, 255, 255, 0.85);
+            --transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Space Grotesk', sans-serif; background-color: var(--bg-cream); color: var(--charcoal); min-height: 100vh; }
+        #bg-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-size: cover; background-position: center; filter: blur(8px) brightness(0.95); opacity: 0.25; z-index: -1; }
+        .container { max-width: 1000px; margin: 0 auto; padding: 2rem 1rem; }
+        header { text-align: center; padding: 2rem 0; background: var(--glass); backdrop-filter: blur(10px); border-radius: 24px; margin-bottom: 2rem; border: 1px solid rgba(255,255,255,0.5); }
+        .avatar-section { display: flex; flex-direction: column; align-items: center; margin-bottom: 1rem; }
+        .cat-frame { width: 160px; height: 160px; border-radius: 30px; background: #EAE5DC; border: 4px solid white; box-shadow: 0 15px 35px rgba(0,0,0,0.1); overflow: hidden; cursor: pointer; transform: rotate(-3deg); transition: var(--transition); }
+        .cat-frame:hover { transform: rotate(3deg) scale(1.05); }
+        .cat-img-preview { width: 100%; height: 100%; background-size: cover; background-position: center; display: none; }
+        .upload-hint { position: absolute; font-size: 0.75rem; text-align: center; padding: 10px; opacity: 0.6; }
+        #cat-photo-input { display: none; }
+        h1 { font-size: 2.5rem; font-weight: 400; margin-top: 1rem; }
+        h1 span { font-family: 'Playfair Display', serif; font-style: italic; color: var(--gold); }
+        .dashboard-grid { display: grid; grid-template-columns: 1.5fr 1fr; gap: 2rem; margin-bottom: 2rem; }
+        @media (max-width: 768px) { .dashboard-grid { grid-template-columns: 1fr; } }
+        .main-card { background: var(--glass); backdrop-filter: blur(10px); padding: 3rem 2rem; border-radius: 32px; border: 1px solid rgba(255,255,255,0.6); text-align: center; }
+        .progress-circle-container { position: relative; width: 180px; height: 180px; margin: 0 auto 2rem auto; }
+        .progress-text { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 1.8rem; font-weight: 600; }
+        .btn-feed { background: var(--charcoal); color: white; border: none; padding: 1.2rem 2.5rem; font-family: inherit; font-size: 1rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.1em; border-radius: 50px; cursor: pointer; transition: var(--transition); }
+        .btn-feed:hover { background: var(--gold); transform: translateY(-2px); }
+        .log-card { background: rgba(42, 42, 42, 0.95); color: var(--bg-cream); padding: 2rem; border-radius: 32px; }
+        .log-title { font-size: 1.2rem; margin-bottom: 1rem; font-weight: 500; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 0.5rem;}
+        .log-list { list-style: none; }
+        .log-item { padding: 0.6rem 0; border-bottom: 1px solid rgba(255,255,255,0.05); font-size: 0.95rem; display: flex; justify-content: space-between; }
+        .log-item span { font-family: 'Playfair Display', serif; font-style: italic; }
+        .calendar-section { background: var(--glass); backdrop-filter: blur(10px); padding: 2.5rem; border-radius: 32px; border: 1px solid rgba(255,255,255,0.6); }
+        .calendar-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
+        .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 0.5rem; text-align: center; }
+        .weekday-label { font-size: 0.8rem; opacity: 0.5; font-weight: 600; }
+        .calendar-day { background: rgba(255,255,255,0.4); padding: 1rem 0; border-radius: 14px; cursor: pointer; font-weight: 500; position: relative; }
+        .calendar-day.today { background: var(--charcoal); color: white; }
+        .calendar-day.has-data::after { content: ''; position: absolute; bottom: 6px; left: 50%; transform: translateX(-50%); width: 6px; height: 6px; background: var(--salmon); border-radius: 50%; }
+        #notification-bar { position: fixed; top: 20px; right: 20px; background: #C84B31; color: white; padding: 1rem 1.5rem; border-radius: 16px; font-size: 0.9rem; transform: translateY(-100px); opacity: 0; transition: all 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275); z-index: 1000; }
+        #notification-bar.show { transform: translateY(0); opacity: 1; }
+        #notification-bar.success { background: #4BB543; }
+    </style>
+</head>
+<body>
+
+    <div id="bg-overlay"></div>
+    <div id="notification-bar">Melding</div>
+
+    <div class="container">
+        <header>
+            <div class="avatar-section">
+                <div class="cat-frame" onclick="triggerUpload()">
+                    <span class="upload-hint" id="upload-hint">Klik voor grappige achtergrond</span>
+                    <div class="cat-img-preview" id="cat-preview"></div>
+                </div>
+                <input type="file" id="cat-photo-input" accept="image/*" onchange="handlePhoto(this)">
+            </div>
+            <h1>The Royal <span>Cat Tracker</span></h1>
+            <p style="text-transform: uppercase; letter-spacing: 0.15em; font-size: 0.8rem; opacity: 0.5;">LIVE Cloud Database — Maximaal 2 Maaltijden</p>
+        </header>
+
+        <div class="dashboard-grid">
+            <div class="main-card">
+                <h2 style="font-weight: 400; margin-bottom: 0.5rem;">Vandaag</h2>
+                <div class="progress-circle-container">
+                    <svg width="180" height="180" viewBox="0 0 180 180">
+                        <circle cx="90" cy="90" r="80" stroke="rgba(0,0,0,0.05)" stroke-width="8" fill="transparent" />
+                        <circle cx="90" cy="90" r="80" stroke="#E8A7A1" stroke-width="8" fill="transparent" 
+                                stroke-dasharray="502" stroke-dashoffset="502" id="circle-progress"
+                                stroke-linecap="round" style="transition: stroke-dashoffset 0.5s ease;" />
+                    </svg>
+                    <div class="progress-text"><span id="pct-label">0</span><sub>/2</sub></div>
+                </div>
+                <p style="font-family: 'Playfair Display', serif; font-style: italic; margin-bottom: 2rem; font-size: 1.1rem;" id="status-comment">Laden...</p>
+                <button class="btn-feed" onclick="feedCat()">Voed de Meester 🎉</button>
+            </div>
+
+            <div class="log-card">
+                <h3 class="log-title">Gevoerd Vandaag</h3>
+                <ul class="log-list" id="today-log-list"></ul>
+            </div>
+        </div>
+
+        <section class="calendar-section">
+            <div class="calendar-header">
+                <h3 style="font-weight: 500;">Historisch Kattenarchief</h3>
+                <span id="calendar-month-year">Juni 2026</span>
+            </div>
+            <div class="calendar-grid" id="calendar-days-container">
+                <div class="weekday-label">MA</div><div class="weekday-label">DI</div><div class="weekday-label">WO</div>
+                <div class="weekday-label">DO</div><div class="weekday-label">VR</div><div class="weekday-label">ZA</div>
+                <div class="weekday-label">ZO</div>
+            </div>
+        </section>
+    </div>
+
+    <script>
+        // --- VUL HIER JOUW SUPABASE GEGEVENS IN ---
+        const SUPABASE_URL = "https://lcqwffbnskimcxyfougf.supabase.co"; 
+        const SUPABASE_KEY = "sb_publishable_FsnxKT2D3uUYVgLS9yEDWw_5G5ORs3x";
+        const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+        let databaseLogs = [];
+        const familyMembers = ["Zusje", "Papa", "Mama", "Ik"];
+        const catFoodTypes = ["Premium Mousse", "Krokante Brokjes", "Luxe Visje", "Katten-Snack"];
+
+        function getTodayKey() {
+            const d = new Date();
+            return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        }
+
+        // Haal direct alle voedingen op uit de cloud database
+        async function loadDataFromCloud() {
+            const { data, error } = await _supabase.from('voedingen').select('*');
+            if (!error && data) {
+                databaseLogs = data;
+                updateUI();
+            }
+        }
+
+        function updateUI() {
+            const todayKey = getTodayKey();
+            // Filter alle logs van vandaag eruit
+            const todayLogs = databaseLogs.filter(log => log.datum === todayKey);
+            const count = todayLogs.length;
+            
+            document.getElementById('pct-label').innerText = count;
+            const circle = document.getElementById('circle-progress');
+            const circumference = 2 * Math.PI * 80;
+            const pct = (count / 2) * 100;
+            circle.style.strokeDashoffset = circumference - (pct / 100) * circumference;
+
+            const comments = [
+                "Status: 0/2 maaltijden. De kat is 'stervende' (zegt hij zelf).",
+                "Status: 1/2 maaltijden. Stabiel, maar loert op een tweede kans.",
+                "Status: 2/2 MAALTIJDEN BEREIKT! De koning liegt vanaf nu over zijn honger."
+            ];
+            document.getElementById('status-comment').innerText = comments[Math.min(count, 2)];
+
+            const logListEl = document.getElementById('today-log-list');
+            logListEl.innerHTML = todayLogs.length === 0 ? '<li class="log-item">Nog niet gevoerd vandaag...</li>' : '';
+            todayLogs.forEach(log => {
+                logListEl.innerHTML += `<li class="log-item">${log.tijd} <span>${log.wie} (gaf ${log.wat})</span></li>`;
+            });
+
+            buildCalendar();
+        }
+
+        async function feedCat() {
+            const todayKey = getTodayKey();
+            const todayLogs = databaseLogs.filter(log => log.datum === todayKey);
+
+            // Harde limiet check aan de voorkant
+            if (todayLogs.length >= 2) {
+                showNotification("FRAUDE DETECTIE! De meester heeft vandaag al 2 keer geeten!", false);
+                return;
+            }
+
+            const wie = familyMembers[Math.floor(Math.random() * familyMembers.length)];
+            const wat = catFoodTypes[Math.floor(Math.random() * catFoodTypes.length)];
+            const now = new Date();
+            const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+            // Stuur live naar Supabase Cloud
+            const { error } = await _supabase.from('voedingen').insert([
+                { datum: todayKey, tijd: timeStr, wie: wie, wat: wat }
+            ]);
+
+            if (!error) {
+                confetti({ particleCount: 140, spread: 80, colors: ['#D4AF37', '#E8A7A1'] });
+                showNotification(`Succes! ${wie} gaf ${wat}`, true);
+                loadDataFromCloud(); // herladen
+            }
+        }
+
+        function buildCalendar() {
+            const container = document.getElementById('calendar-days-container');
+            const labels = container.querySelectorAll('.weekday-label');
+            container.innerHTML = '';
+            labels.forEach(l => container.appendChild(l));
+
+            const d = new Date();
+            const currentYear = d.getFullYear();
+            const currentMonth = d.getMonth();
+
+            const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+            let firstDayIndex = new Date(currentYear, currentMonth, 1).getDay();
+            firstDayIndex = firstDayIndex === 0 ? 6 : firstDayIndex - 1;
+
+            for(let i=0; i<firstDayIndex; i++) container.appendChild(document.createElement('div'));
+
+            for(let day=1; day<=daysInMonth; day++) {
+                const dayDiv = document.createElement('div');
+                dayDiv.classList.add('calendar-day');
+                dayDiv.innerText = day;
+
+                const dateKey = `${currentYear}-${String(currentMonth+1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                
+                // Check of deze dag voedingen heeft in de database logs
+                const hasData = databaseLogs.some(log => log.datum === dateKey);
+                if (hasData) dayDiv.classList.add('has-data');
+                if (day === d.getDate()) dayDiv.classList.add('today');
+
+                container.appendChild(dayDiv);
+            }
+        }
+
+        function showNotification(msg, isSuccess) {
+            const bar = document.getElementById('notification-bar');
+            bar.innerText = msg;
+            bar.className = isSuccess ? 'show success' : 'show';
+            setTimeout(() => bar.classList.remove('show'), 4000);
+        }
+
+        function triggerUpload() { document.getElementById('cat-photo-input').click(); }
+        function handlePhoto(input) {
+            const file = input.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    document.getElementById('cat-preview').style.backgroundImage = `url(${e.target.result})`;
+                    document.getElementById('cat-preview').style.display = 'block';
+                    document.getElementById('upload-hint').style.display = 'none';
+                    document.getElementById('bg-overlay').style.backgroundImage = `url(${e.target.result})`;
+                    localStorage.setItem('royalCatPhoto', e.target.result);
+                }
+                reader.readAsDataURL(file);
+            }
+        }
+
+        window.onload = function() {
+            const savedPhoto = localStorage.getItem('royalCatPhoto');
+            if(savedPhoto) {
+                document.getElementById('cat-preview').style.backgroundImage = `url(${savedPhoto})`;
+                document.getElementById('cat-preview').style.display = 'block';
+                document.getElementById('upload-hint').style.display = 'none';
+                document.getElementById('bg-overlay').style.backgroundImage = `url(${savedPhoto})`;
+            }
+            loadDataFromCloud();
+            setInterval(loadDataFromCloud, 5000); // Check elke 5 seconden voor cloud updates van je familie!
+        }
+    </script>
+</body>
+</html>
