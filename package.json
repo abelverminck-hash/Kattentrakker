@@ -1,0 +1,14 @@
+{
+  "name": "katten-tracker",
+  "version": "1.0.0",
+  "description": "Live gezins-dashboard voor de kat",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  },
+  "author": "Abel",
+  "license": "ISC"
+}
