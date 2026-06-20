@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>The Royal Cat Tracker - Supabase Cloud</title>
+    <title>The Royal Cat Tracker - Beveiligd Familie Dashboard</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@1,400..700&family=Space+Grotesk:wght@300;400;500;600&display=swap" rel="stylesheet">
@@ -23,8 +23,22 @@
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { font-family: 'Space Grotesk', sans-serif; background-color: var(--bg-cream); color: var(--charcoal); min-height: 100vh; }
         #bg-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-size: cover; background-position: center; filter: blur(8px) brightness(0.95); opacity: 0.25; z-index: -1; }
-        .container { max-width: 1000px; margin: 0 auto; padding: 2rem 1rem; }
-        header { text-align: center; padding: 2rem 0; background: var(--glass); backdrop-filter: blur(10px); border-radius: 24px; margin-bottom: 2rem; border: 1px solid rgba(255,255,255,0.5); }
+        .container { max-width: 1000px; margin: 0 auto; padding: 2rem 1rem; display: none; } /* Verberg dashboard tot login */
+        
+        /* LOGIN SCHERM STYLES */
+        .login-container { max-width: 400px; margin: 10vh auto; padding: 2.5rem; background: var(--glass); backdrop-filter: blur(10px); border-radius: 32px; border: 1px solid rgba(255,255,255,0.6); text-align: center; box-shadow: 0 20px 50px rgba(0,0,0,0.05); }
+        .login-title { font-family: 'Playfair Display', serif; font-style: italic; font-size: 2rem; margin-bottom: 1.5rem; }
+        .form-group { margin-bottom: 1.2rem; text-align: left; }
+        .form-group label { display: block; margin-bottom: 0.4rem; font-size: 0.9rem; font-weight: 500; opacity: 0.7; }
+        .form-control { width: 100%; padding: 0.8rem 1rem; border-radius: 12px; border: 1px solid rgba(0,0,0,0.1); font-family: inherit; font-size: 1rem; background: white; outline: none; }
+        .form-control:focus { border-color: var(--gold); }
+        .btn-login { width: 100%; background: var(--charcoal); color: white; border: none; padding: 1rem; border-radius: 50px; font-family: inherit; font-size: 1rem; font-weight: 500; cursor: pointer; transition: var(--transition); text-transform: uppercase; letter-spacing: 0.05em; margin-top: 0.5rem; }
+        .btn-login:hover { background: var(--gold); }
+
+        /* DASHBOARD STYLES */
+        header { text-align: center; padding: 2rem 0; background: var(--glass); backdrop-filter: blur(10px); border-radius: 24px; margin-bottom: 2rem; border: 1px solid rgba(255,255,255,0.5); position: relative; }
+        .btn-logout { position: absolute; top: 20px; right: 20px; background: transparent; border: 1px solid rgba(0,0,0,0.1); padding: 0.5rem 1rem; border-radius: 20px; font-family: inherit; font-size: 0.8rem; cursor: pointer; }
+        .btn-logout:hover { background: rgba(0,0,0,0.05); }
         .avatar-section { display: flex; flex-direction: column; align-items: center; margin-bottom: 1rem; }
         .cat-frame { width: 160px; height: 160px; border-radius: 30px; background: #EAE5DC; border: 4px solid white; box-shadow: 0 15px 35px rgba(0,0,0,0.1); overflow: hidden; cursor: pointer; transform: rotate(-3deg); transition: var(--transition); }
         .cat-frame:hover { transform: rotate(3deg) scale(1.05); }
@@ -62,8 +76,27 @@
     <div id="bg-overlay"></div>
     <div id="notification-bar">Melding</div>
 
-    <div class="container">
+    <div class="login-container" id="login-screen">
+        <h2 class="login-title">Wie is daar? 🐾</h2>
+        <div class="form-group">
+            <label for="login-name">Kies je naam</label>
+            <select class="form-control" id="login-name">
+                <option value="Ik">Ik (Abel)</option>
+                <option value="Zusje">Zusje</option>
+                <option value="Papa">Papa</option>
+                <option value="Mama">Mama</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="login-pin">Gezins-pincode</label>
+            <input type="password" class="form-control" id="login-pin" placeholder="••••" maxlength="6">
+        </div>
+        <button class="btn-login" onclick="attemptLogin()">Inloggen</button>
+    </div>
+
+    <div class="container" id="dashboard-screen">
         <header>
+            <button class="btn-logout" onclick="logout()">Uitloggen</button>
             <div class="avatar-section">
                 <div class="cat-frame" onclick="triggerUpload()">
                     <span class="upload-hint" id="upload-hint">Klik voor grappige achtergrond</span>
@@ -72,7 +105,7 @@
                 <input type="file" id="cat-photo-input" accept="image/*" onchange="handlePhoto(this)">
             </div>
             <h1>The Royal <span>Cat Tracker</span></h1>
-            <p style="text-transform: uppercase; letter-spacing: 0.15em; font-size: 0.8rem; opacity: 0.5;">LIVE Cloud Database — Maximaal 2 Maaltijden</p>
+            <p style="text-transform: uppercase; letter-spacing: 0.15em; font-size: 0.8rem; opacity: 0.5;">Welkom <span id="user-welcome-name" style="font-weight:600; color:var(--gold);"></span> — Cloud Database</p>
         </header>
 
         <div class="dashboard-grid">
@@ -111,13 +144,13 @@
     </div>
 
     <script>
-        // --- VUL HIER JOUW SUPABASE GEGEVENS IN ---
-        const SUPABASE_URL = "https://lcqwffbnskimcxyfougf.supabase.co"; 
-        const SUPABASE_KEY = "sb_publishable_FsnxKT2D3uUYVgLS9yEDWw_5G5ORs3x";
+        // --- VUL HIER JOUW JOUW EIGEN SUPABASE CODES IN ---
+        const SUPABASE_URL = "JOUW_SUPABASE_URL"; 
+        const SUPABASE_KEY = "JOUW_SUPABASE_ANON_KEY";
         const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
         let databaseLogs = [];
-        const familyMembers = ["Zusje", "Papa", "Mama", "Ik"];
+        let ingelogdeGebruiker = null;
         const catFoodTypes = ["Premium Mousse", "Krokante Brokjes", "Luxe Visje", "Katten-Snack"];
 
         function getTodayKey() {
@@ -125,7 +158,42 @@
             return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
         }
 
-        // Haal direct alle voedingen op uit de cloud database
+        // --- INLOG LOGICA ---
+        async function attemptLogin() {
+            const gekozenNaam = document.getElementById('login-name').value;
+            const ingevoerdePin = document.getElementById('login-pin').value;
+
+            // Check pincode in Supabase
+            const { data, error } = await _supabase
+                .from('gebruikers')
+                .select('*')
+                .eq('naam', gekozenNaam)
+                .eq('pincode', ingevoerdePin);
+
+            if (!error && data && data.length > 0) {
+                // Succesvol ingelogd!
+                ingelogdeGebruiker = gekozenNaam;
+                localStorage.setItem('ingelogdeKatGebruiker', gekozenNaam); // Onthoud sessie
+                showNotification(`Welkom terug, ${gekozenNaam}!`, true);
+                showDashboard();
+            } else {
+                showNotification("Foutieve pincode! De kat is diep teleurgesteld.", false);
+            }
+        }
+
+        function showDashboard() {
+            document.getElementById('login-screen').style.display = 'none';
+            document.getElementById('dashboard-screen').style.display = 'block';
+            document.getElementById('user-welcome-name').innerText = ingelogdeGebruiker;
+            loadDataFromCloud();
+        }
+
+        function logout() {
+            localStorage.removeItem('ingelogdeKatGebruiker');
+            location.reload();
+        }
+
+        // --- DATA EN CLOUD LOGICA ---
         async function loadDataFromCloud() {
             const { data, error } = await _supabase.from('voedingen').select('*');
             if (!error && data) {
@@ -136,7 +204,6 @@
 
         function updateUI() {
             const todayKey = getTodayKey();
-            // Filter alle logs van vandaag eruit
             const todayLogs = databaseLogs.filter(log => log.datum === todayKey);
             const count = todayLogs.length;
             
@@ -147,9 +214,9 @@
             circle.style.strokeDashoffset = circumference - (pct / 100) * circumference;
 
             const comments = [
-                "Status: 0/2 maaltijden. De kat is 'stervende' (zegt hij zelf).",
-                "Status: 1/2 maaltijden. Stabiel, maar loert op een tweede kans.",
-                "Status: 2/2 MAALTIJDEN BEREIKT! De koning liegt vanaf nu over zijn honger."
+                "Status: 0/2 maaltijden. De kat claimt dat hij nog nooit eten heeft gehad.",
+                "Status: 1/2 maaltijden. Halverwege! De koning houdt jullie scherp in de gaten.",
+                "Status: 2/2 MAALTIJDEN BEREIKT! Systeem op slot. Trap niet in zijn klaagzang."
             ];
             document.getElementById('status-comment').innerText = comments[Math.min(count, 2)];
 
@@ -166,26 +233,25 @@
             const todayKey = getTodayKey();
             const todayLogs = databaseLogs.filter(log => log.datum === todayKey);
 
-            // Harde limiet check aan de voorkant
             if (todayLogs.length >= 2) {
-                showNotification("FRAUDE DETECTIE! De meester heeft vandaag al 2 keer geeten!", false);
+                showNotification("KATTEN-ALARM! Er is vandaag al 2 keer gevoerd!", false);
                 return;
             }
 
-            const wie = familyMembers[Math.floor(Math.random() * familyMembers.length)];
+            // Gebruik NU de exacte naam van wie is ingelogd!
+            const wie = ingelogdeGebruiker;
             const wat = catFoodTypes[Math.floor(Math.random() * catFoodTypes.length)];
             const now = new Date();
             const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
-            // Stuur live naar Supabase Cloud
             const { error } = await _supabase.from('voedingen').insert([
                 { datum: todayKey, tijd: timeStr, wie: wie, wat: wat }
             ]);
 
             if (!error) {
                 confetti({ particleCount: 140, spread: 80, colors: ['#D4AF37', '#E8A7A1'] });
-                showNotification(`Succes! ${wie} gaf ${wat}`, true);
-                loadDataFromCloud(); // herladen
+                showNotification(`Succes! Je hebt de meester gediend.`, true);
+                loadDataFromCloud();
             }
         }
 
@@ -211,8 +277,6 @@
                 dayDiv.innerText = day;
 
                 const dateKey = `${currentYear}-${String(currentMonth+1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-                
-                // Check of deze dag voedingen heeft in de database logs
                 const hasData = databaseLogs.some(log => log.datum === dateKey);
                 if (hasData) dayDiv.classList.add('has-data');
                 if (day === d.getDate()) dayDiv.classList.add('today');
@@ -244,6 +308,7 @@
             }
         }
 
+        // Opstarten en sessie controleren
         window.onload = function() {
             const savedPhoto = localStorage.getItem('royalCatPhoto');
             if(savedPhoto) {
@@ -252,8 +317,13 @@
                 document.getElementById('upload-hint').style.display = 'none';
                 document.getElementById('bg-overlay').style.backgroundImage = `url(${savedPhoto})`;
             }
-            loadDataFromCloud();
-            setInterval(loadDataFromCloud, 5000); // Check elke 5 seconden voor cloud updates van je familie!
+            
+            const reedsIngelogd = localStorage.getItem('ingelogdeKatGebruiker');
+            if (reedsIngelogd) {
+                ingelogdeGebruiker = reedsIngelogd;
+                showDashboard();
+                setInterval(loadDataFromCloud, 5000);
+            }
         }
     </script>
 </body>
