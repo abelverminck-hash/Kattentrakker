@@ -1,6 +1,5 @@
 <!DOCTYPE html>
-<html lang="nl">
-<head>
+<html lang="nl"><head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>The Royal Cat Tracker - Beveiligd Familie Dashboard</title>
@@ -142,189 +141,203 @@
             </div>
         </section>
     </div>
-
+		
     <script>
-        // --- VUL HIER JOUW JOUW EIGEN SUPABASE CODES IN ---
-        const SUPABASE_URL = "JOUW_SUPABASE_URL"; 
-        const SUPABASE_KEY = "JOUW_SUPABASE_ANON_KEY";
-        const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    // --- 1. DE DATABASE DIRECT OPSTARTEN (BOVENAAN) ---
+    const SUPABASE_URL = "JOUW_SUPABASE_URL"; 
+    const SUPABASE_KEY = "JOUW_SUPABASE_ANON_KEY";
+    const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-        let databaseLogs = [];
-        let ingelogdeGebruiker = null;
-        const catFoodTypes = ["Premium Mousse", "Krokante Brokjes", "Luxe Visje", "Katten-Snack"];
+    // --- 2. DE REST VAN DE VARIABELEN ---
+    let databaseLogs = [];
+    let ingelogdeGebruiker = null;
+    const catFoodTypes = ["Premium Mousse", "Krokante Brokjes", "Luxe Visje", "Katten-Snack"];
 
-        function getTodayKey() {
-            const d = new Date();
-            return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-        }
+    function getTodayKey() {
+        const d = new Date();
+        return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    }
 
-        // --- INLOG LOGICA ---
-        async function attemptLogin() {
-            const gekozenNaam = document.getElementById('login-name').value;
-            const ingevoerdePin = document.getElementById('login-pin').value;
+    // --- 3. INLOG LOGICA ---
+    async function attemptLogin() {
+        const gekozenNaam = document.getElementById('login-name').value;
+        const ingevoerdePin = document.getElementById('login-pin').value;
 
-            // Check pincode in Supabase
+        try {
             const { data, error } = await _supabase
                 .from('gebruikers')
                 .select('*')
                 .eq('naam', gekozenNaam)
                 .eq('pincode', ingevoerdePin);
 
-            if (!error && data && data.length > 0) {
-                // Succesvol ingelogd!
+            if (error) {
+                console.error("Supabase Fout:", error);
+                showNotification("Database fout: " + error.message, false);
+                return;
+            }
+
+            if (data && data.length > 0) {
                 ingelogdeGebruiker = gekozenNaam;
-                localStorage.setItem('ingelogdeKatGebruiker', gekozenNaam); // Onthoud sessie
+                localStorage.setItem('ingelogdeKatGebruiker', gekozenNaam);
                 showNotification(`Welkom terug, ${gekozenNaam}!`, true);
                 showDashboard();
             } else {
                 showNotification("Foutieve pincode! De kat is diep teleurgesteld.", false);
             }
+        } catch (err) {
+            console.error("Algemene Fout:", err);
+            showNotification("Er ging iets mis. Check de console!", false);
         }
+    }
 
-        function showDashboard() {
-            document.getElementById('login-screen').style.display = 'none';
-            document.getElementById('dashboard-screen').style.display = 'block';
-            document.getElementById('user-welcome-name').innerText = ingelogdeGebruiker;
-            loadDataFromCloud();
-        }
+    function showDashboard() {
+        document.getElementById('login-screen').style.display = 'none';
+        document.getElementById('dashboard-screen').style.display = 'block';
+        document.getElementById('user-welcome-name').innerText = ingelogdeGebruiker;
+        loadDataFromCloud();
+        // Start de live-synchronisatie nadat je bent ingelogd
+        setInterval(loadDataFromCloud, 5000);
+    }
 
-        function logout() {
-            localStorage.removeItem('ingelogdeKatGebruiker');
-            location.reload();
-        }
+    function logout() {
+        localStorage.removeItem('ingelogdeKatGebruiker');
+        location.reload();
+    }
 
-        // --- DATA EN CLOUD LOGICA ---
-        async function loadDataFromCloud() {
+    // --- 4. CLOUD DATA OPHALEN ---
+    async function loadDataFromCloud() {
+        try {
             const { data, error } = await _supabase.from('voedingen').select('*');
             if (!error && data) {
                 databaseLogs = data;
                 updateUI();
             }
+        } catch (e) {
+            console.error("Fout bij laden cloud data:", e);
+        }
+    }
+
+    function updateUI() {
+        const todayKey = getTodayKey();
+        const todayLogs = databaseLogs.filter(log => log.datum === todayKey);
+        const count = todayLogs.length;
+        
+        document.getElementById('pct-label').innerText = count;
+        const circle = document.getElementById('circle-progress');
+        const circumference = 2 * Math.PI * 80;
+        const pct = (count / 2) * 100;
+        circle.style.strokeDashoffset = circumference - (pct / 100) * circumference;
+
+        const comments = [
+            "Status: 0/2 maaltijden. De kat claimt dat hij nog nooit eten heeft gehad.",
+            "Status: 1/2 maaltijden. Halverwege! De koning houdt jullie scherp in de gaten.",
+            "Status: 2/2 MAALTIJDEN BEREIKT! Systeem op slot. Trap niet in zijn klaagzang."
+        ];
+        document.getElementById('status-comment').innerText = comments[Math.min(count, 2)];
+
+        const logListEl = document.getElementById('today-log-list');
+        logListEl.innerHTML = todayLogs.length === 0 ? '<li class="log-item">Nog niet gevoerd vandaag...</li>' : '';
+        todayLogs.forEach(log => {
+            logListEl.innerHTML += `<li class="log-item">${log.tijd} <span>${log.wie} (gaf ${log.wat})</span></li>`;
+        });
+
+        buildCalendar();
+    }
+
+    async function feedCat() {
+        const todayKey = getTodayKey();
+        const todayLogs = databaseLogs.filter(log => log.datum === todayKey);
+
+        if (todayLogs.length >= 2) {
+            showNotification("KATTEN-ALARM! Er is vandaag al 2 keer gevoerd!", false);
+            return;
         }
 
-        function updateUI() {
-            const todayKey = getTodayKey();
-            const todayLogs = databaseLogs.filter(log => log.datum === todayKey);
-            const count = todayLogs.length;
-            
-            document.getElementById('pct-label').innerText = count;
-            const circle = document.getElementById('circle-progress');
-            const circumference = 2 * Math.PI * 80;
-            const pct = (count / 2) * 100;
-            circle.style.strokeDashoffset = circumference - (pct / 100) * circumference;
+        const wie = ingelogdeGebruiker;
+        const wat = catFoodTypes[Math.floor(Math.random() * catFoodTypes.length)];
+        const now = new Date();
+        const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
-            const comments = [
-                "Status: 0/2 maaltijden. De kat claimt dat hij nog nooit eten heeft gehad.",
-                "Status: 1/2 maaltijden. Halverwege! De koning houdt jullie scherp in de gaten.",
-                "Status: 2/2 MAALTIJDEN BEREIKT! Systeem op slot. Trap niet in zijn klaagzang."
-            ];
-            document.getElementById('status-comment').innerText = comments[Math.min(count, 2)];
+        const { error } = await _supabase.from('voedingen').insert([
+            { datum: todayKey, tijd: timeStr, wie: wie, wat: wat }
+        ]);
 
-            const logListEl = document.getElementById('today-log-list');
-            logListEl.innerHTML = todayLogs.length === 0 ? '<li class="log-item">Nog niet gevoerd vandaag...</li>' : '';
-            todayLogs.forEach(log => {
-                logListEl.innerHTML += `<li class="log-item">${log.tijd} <span>${log.wie} (gaf ${log.wat})</span></li>`;
-            });
-
-            buildCalendar();
+        if (!error) {
+            confetti({ particleCount: 140, spread: 80, colors: ['#D4AF37', '#E8A7A1'] });
+            showNotification(`Succes! Je hebt de meester gediend.`, true);
+            loadDataFromCloud();
         }
+    }
 
-        async function feedCat() {
-            const todayKey = getTodayKey();
-            const todayLogs = databaseLogs.filter(log => log.datum === todayKey);
+    function buildCalendar() {
+        const container = document.getElementById('calendar-days-container');
+        const labels = container.querySelectorAll('.weekday-label');
+        container.innerHTML = '';
+        labels.forEach(l => container.appendChild(l));
 
-            if (todayLogs.length >= 2) {
-                showNotification("KATTEN-ALARM! Er is vandaag al 2 keer gevoerd!", false);
-                return;
-            }
+        const d = new Date();
+        const currentYear = d.getFullYear();
+        const currentMonth = d.getMonth();
 
-            // Gebruik NU de exacte naam van wie is ingelogd!
-            const wie = ingelogdeGebruiker;
-            const wat = catFoodTypes[Math.floor(Math.random() * catFoodTypes.length)];
-            const now = new Date();
-            const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+        const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+        let firstDayIndex = new Date(currentYear, currentMonth, 1).getDay();
+        firstDayIndex = firstDayIndex === 0 ? 6 : firstDayIndex - 1;
 
-            const { error } = await _supabase.from('voedingen').insert([
-                { datum: todayKey, tijd: timeStr, wie: wie, wat: wat }
-            ]);
+        for(let i=0; i<firstDayIndex; i++) container.appendChild(document.createElement('div'));
 
-            if (!error) {
-                confetti({ particleCount: 140, spread: 80, colors: ['#D4AF37', '#E8A7A1'] });
-                showNotification(`Succes! Je hebt de meester gediend.`, true);
-                loadDataFromCloud();
-            }
+        for(let day=1; day<=daysInMonth; day++) {
+            const dayDiv = document.createElement('div');
+            dayDiv.classList.add('calendar-day');
+            dayDiv.innerText = day;
+
+            const dateKey = `${currentYear}-${String(currentMonth+1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+            const hasData = databaseLogs.some(log => log.datum === dateKey);
+            if (hasData) dayDiv.classList.add('has-data');
+            if (day === d.getDate()) dayDiv.classList.add('today');
+
+            container.appendChild(dayDiv);
         }
+    }
 
-        function buildCalendar() {
-            const container = document.getElementById('calendar-days-container');
-            const labels = container.querySelectorAll('.weekday-label');
-            container.innerHTML = '';
-            labels.forEach(l => container.appendChild(l));
+    function showNotification(msg, isSuccess) {
+        const bar = document.getElementById('notification-bar');
+        bar.innerText = msg;
+        bar.className = isSuccess ? 'show success' : 'show';
+        setTimeout(() => bar.classList.remove('show'), 4000);
+    }
 
-            const d = new Date();
-            const currentYear = d.getFullYear();
-            const currentMonth = d.getMonth();
-
-            const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
-            let firstDayIndex = new Date(currentYear, currentMonth, 1).getDay();
-            firstDayIndex = firstDayIndex === 0 ? 6 : firstDayIndex - 1;
-
-            for(let i=0; i<firstDayIndex; i++) container.appendChild(document.createElement('div'));
-
-            for(let day=1; day<=daysInMonth; day++) {
-                const dayDiv = document.createElement('div');
-                dayDiv.classList.add('calendar-day');
-                dayDiv.innerText = day;
-
-                const dateKey = `${currentYear}-${String(currentMonth+1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-                const hasData = databaseLogs.some(log => log.datum === dateKey);
-                if (hasData) dayDiv.classList.add('has-data');
-                if (day === d.getDate()) dayDiv.classList.add('today');
-
-                container.appendChild(dayDiv);
-            }
-        }
-
-        function showNotification(msg, isSuccess) {
-            const bar = document.getElementById('notification-bar');
-            bar.innerText = msg;
-            bar.className = isSuccess ? 'show success' : 'show';
-            setTimeout(() => bar.classList.remove('show'), 4000);
-        }
-
-        function triggerUpload() { document.getElementById('cat-photo-input').click(); }
-        function handlePhoto(input) {
-            const file = input.files[0];
-            if (file) {
-                const reader = new FileReader();
-                reader.onload = function(e) {
-                    document.getElementById('cat-preview').style.backgroundImage = `url(${e.target.result})`;
-                    document.getElementById('cat-preview').style.display = 'block';
-                    document.getElementById('upload-hint').style.display = 'none';
-                    document.getElementById('bg-overlay').style.backgroundImage = `url(${e.target.result})`;
-                    localStorage.setItem('royalCatPhoto', e.target.result);
-                }
-                reader.readAsDataURL(file);
-            }
-        }
-
-        // Opstarten en sessie controleren
-        window.onload = function() {
-            const savedPhoto = localStorage.getItem('royalCatPhoto');
-            if(savedPhoto) {
-                document.getElementById('cat-preview').style.backgroundImage = `url(${savedPhoto})`;
+    function triggerUpload() { document.getElementById('cat-photo-input').click(); }
+    function handlePhoto(input) {
+        const file = input.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                document.getElementById('cat-preview').style.backgroundImage = `url(${e.target.result})`;
                 document.getElementById('cat-preview').style.display = 'block';
                 document.getElementById('upload-hint').style.display = 'none';
-                document.getElementById('bg-overlay').style.backgroundImage = `url(${savedPhoto})`;
+                document.getElementById('bg-overlay').style.backgroundImage = `url(${e.target.result})`;
+                localStorage.setItem('royalCatPhoto', e.target.result);
             }
-            
-            const reedsIngelogd = localStorage.getItem('ingelogdeKatGebruiker');
-            if (reedsIngelogd) {
-                ingelogdeGebruiker = reedsIngelogd;
-                showDashboard();
-                setInterval(loadDataFromCloud, 5000);
-            }
+            reader.readAsDataURL(file);
         }
-    </script>
+    }
+
+    // --- AUTOMATISCH INLOGGEN BIJ BEZOEK ---
+    window.onload = function() {
+        const savedPhoto = localStorage.getItem('royalCatPhoto');
+        if(savedPhoto) {
+            document.getElementById('cat-preview').style.backgroundImage = `url(${savedPhoto})`;
+            document.getElementById('cat-preview').style.display = 'block';
+            document.getElementById('upload-hint').style.display = 'none';
+            document.getElementById('bg-overlay').style.backgroundImage = `url(${savedPhoto})`;
+        }
+        
+        const reedsIngelogd = localStorage.getItem('ingelogdeKatGebruiker');
+        if (reedsIngelogd) {
+            ingelogdeGebruiker = reedsIngelogd;
+            showDashboard();
+        }
+    }
+</script>
 </body>
 </html>
